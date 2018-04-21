@@ -14,6 +14,7 @@ ffi.cdef[[
   typedef struct leveldb_writeoptions_t leveldb_writeoptions_t;
 
   leveldb_t* leveldb_open(const leveldb_options_t* options, const char* name, char** errptr);
+  void leveldb_destroy_db(const leveldb_options_t* options, const char* name, char** errptr);
   void leveldb_close(leveldb_t* db);
   void leveldb_free(void* ptr);
   int leveldb_major_version();
@@ -94,7 +95,7 @@ local function create_write_options()
 end
 
 
-function M.new(filename, options)
+function M.new(dirname, options)
   local db = {}
   local mt = {__index = M}
 
@@ -105,7 +106,7 @@ function M.new(filename, options)
   local c_options = create_options(db.options)
   local c_err = ffi.new("char*[1]")
 
-  db._db = leveldb.leveldb_open(c_options, filename, c_err)
+  db._db = leveldb.leveldb_open(c_options, dirname, c_err)
   leveldb.leveldb_options_destroy(c_options)
 
   if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
@@ -192,7 +193,17 @@ end
 
 function M:close()
   leveldb.leveldb_close(self._db)
-  leveldb.leveldb_free(db._db)
+end
+
+function M.destroy_db(dirname)
+  local c_options = create_options()
+  local c_err = ffi.new("char*[1]")
+
+  leveldb.leveldb_destroy_db(c_options, dirname, c_err)
+  leveldb.leveldb_options_destroy(c_options)
+
+  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
+  return true
 end
 
 
@@ -235,6 +246,23 @@ function Iterator:next()
   local value = ffi.string(c_value, c_value_size[0])
 
   leveldb.leveldb_iter_next(self.iterator)
+
+  return key, value
+end
+
+function Iterator:prev()
+  local valid = leveldb.leveldb_iter_valid(self.iterator)
+  if valid == 0 then return nil end
+
+  local c_key_size = ffi.new("size_t[1]")
+  local c_key = leveldb.leveldb_iter_key(self.iterator, c_key_size)
+  local key = ffi.string(c_key, c_key_size[0])
+
+  local c_value_size = ffi.new("size_t[1]")
+  local c_value = leveldb.leveldb_iter_value(self.iterator, c_value_size)
+  local value = ffi.string(c_value, c_value_size[0])
+
+  leveldb.leveldb_iter_prev(self.iterator)
 
   return key, value
 end

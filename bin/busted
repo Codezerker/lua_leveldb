@@ -1,0 +1,5 @@
+#!/bin/sh
+
+cmd=$(which luajit || which lua)
+
+exec $cmd -e "package.path=\"$HOME/.luarocks/share/lua/5.1/?.lua;$HOME/.luarocks/share/lua/5.1/?/init.lua;/usr/local/share/lua/5.1/?.lua;/usr/local/share/lua/5.1/?/init.lua;\"..package.path; package.cpath=\"$HOME/.luarocks/lib/lua/5.1/?.so;/usr/local/lib/lua/5.1/?.so;\"..package.cpath" -e "local k,l,_=pcall(require,\"luarocks.loader\") _=k and l.add_context(\"busted\",\"2.0.rc12-1\")" "$HOME/.luarocks/lib/luarocks/rocks-5.1/busted/2.0.rc12-1/bin/busted" "$@"
