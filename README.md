@@ -3,6 +3,10 @@ Lua LevelDB
 
 This is a FFI library, provide some simple interface.
 
+## Requirements
+
+* LuaJIT 
+
 
 ## APIs
 
@@ -84,5 +88,11 @@ print_db_data()
 
 print('close')
 db:close()
+```
 
+
+## Test
+
+```
+bin/busted
 ```
