@@ -2,7 +2,7 @@ describe('LevelDB', function()
   local db = LevelDB.new('./tmp/test')
 
   before_each(function()
-    local iter = db:new_iterator()
+    local iter = db:newIterator()
     iter:first()
     for k, v in iter.next, iter do db:del(k) end
   end)
@@ -65,7 +65,7 @@ describe('LevelDB', function()
   describe('Iterator', function()
     it('should allow map all data from first to last', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:new_iterator()
+      local iter = db:newIterator()
       iter:first()
       local kvs = {}
       for k, v in iter.next, iter do table.insert(kvs, {k, v}) end
@@ -75,7 +75,7 @@ describe('LevelDB', function()
 
     it('should allow map all data from first to first', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:new_iterator()
+      local iter = db:newIterator()
       iter:first()
       local kvs = {}
       for k, v in iter.prev, iter do table.insert(kvs, {k, v}) end
@@ -85,7 +85,7 @@ describe('LevelDB', function()
 
     it('should allow map from last to last', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:new_iterator()
+      local iter = db:newIterator()
       iter:last()
       local kvs = {}
       for k, v in iter.next, iter do table.insert(kvs, {k, v}); end
@@ -95,7 +95,7 @@ describe('LevelDB', function()
 
     it('should allow map from last to first', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:new_iterator()
+      local iter = db:newIterator()
       iter:last()
       local kvs = {}
       for k, v in iter.prev, iter do table.insert(kvs, {k, v}); end
@@ -106,7 +106,7 @@ describe('LevelDB', function()
     it('should allow map from a key to last', function()
       db:batchSet({b = '2', e = '1'})
       db:batchSet({a = '12', d = '14'})
-      local iter = db:new_iterator()
+      local iter = db:newIterator()
       iter:seek('c')
       local kvs = {}
       for k, v in iter.next, iter do table.insert(kvs, {k, v}); end

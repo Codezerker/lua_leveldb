@@ -187,7 +187,7 @@ function M:batchDel(data, options)
   if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
 end
 
-function M:new_iterator(options)
+function M:newIterator(options)
   return Iterator.new(self._db, options)
 end
 

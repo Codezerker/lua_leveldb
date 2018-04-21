@@ -1,16 +1,56 @@
+Lua LevelDB
+===========
+
+This is a FFI library, provide some simple interface.
+
+
+## APIs
+
+__DB Class__
+
+* open(name, options)
+* destroy_db(name)
+
+
+__DB Instrace__ 
+
+* get(key)
+* set(key, val)
+* del(key)
+* batchSet({k1 = 'v', k2 = 'v2'})
+* batchDel({'k1', 'k2'})
+* newIterator(options)
+* close()
+
+
+__Iterator__
+
+* first()
+* last()
+* seek(key)
+* next()
+* prev()
+* destroy()
+
+
+## Example
+
+Example
+
+```
 leveldb = require 'leveldb'
 db = leveldb.new('./tmp')
 
 print('version: ' .. db.version .. "\n")
 
-print('Get k1 => ' .. (db:get('k1') or "'nil'"))
-print('Get k2 => ' .. (db:get('k2') or "'nil'"))
+print('Get k1 => ' .. db:get('k1'))
+print('Get k2 => ' .. db:get('k2'))
 print('Get unset_key => ' .. (db:get('unset_key') or "'nil'"))
 print("")
 
 function print_db_data()
   print('Iterator all keys')
-  local iter = db:newIterator()
+  local iter = db:new_iterator()
 
   iter:first()
   for k, v in iter.next, iter do
@@ -45,3 +85,4 @@ print_db_data()
 print('close')
 db:close()
 
+```
