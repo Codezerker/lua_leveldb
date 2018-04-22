@@ -1,0 +1,8 @@
+#! /usr/bin/env bash
+
+if [[ "$1" == "focus" ]]; then
+  busted -t focus $(dirname $0)/../ 
+else
+  busted $(dirname $0)/../
+fi
+

@@ -10,31 +10,30 @@ This is a FFI library, provide some simple interface.
 
 ## APIs
 
-__DB Class__
+__DB__
 
-* open(name, options)
-* destroy_db(name)
-
-
-__DB Instrace__ 
-
-* get(key)
-* set(key, val)
-* del(key)
-* batchSet({k1 = 'v', k2 = 'v2'})
-* batchDel({'k1', 'k2'})
-* newIterator(options)
-* close()
+* LevelDB.new(name, options)
+* LevelDB.destroy_db(name)
+* LevelDB:get(key)
+* LevelDB:set(key, val)
+* LevelDB:del(key)
+* LevelDB:batchSet({k1 = 'v', k2 = 'v2'})
+* LevelDB:batchDel({'k1', 'k2'})
+* LevelDB:newIteratorWith(options, function(iter))
+* LevelDB:each(options, function(key, val, iter)) // return false to stop the each
+* LevelDB:close()
 
 
 __Iterator__
 
-* first()
-* last()
-* seek(key)
-* next()
-* prev()
-* destroy()
+* Iterator.new(leveldb, options)
+* Iterator:first()
+* Iterator:last()
+* Iterator:seek(key)
+* Iterator:next()
+* Iterator:prev()
+* Iterator:read() // return key, value of current iterator location
+* Iterator:destroy()
 
 
 ## Example
@@ -42,25 +41,19 @@ __Iterator__
 Example
 
 ```
-leveldb = require 'leveldb'
-db = leveldb.new('./tmp')
+LevelDB = require 'leveldb'
+db = LevelDB.new('./tmp')
 
 print('version: ' .. db.version .. "\n")
 
-print('Get k1 => ' .. db:get('k1'))
-print('Get k2 => ' .. db:get('k2'))
+print('Get k1 => ' .. (db:get('k1') or "'nil'"))
+print('Get k2 => ' .. (db:get('k2') or "'nil'"))
 print('Get unset_key => ' .. (db:get('unset_key') or "'nil'"))
 print("")
 
 function print_db_data()
   print('Iterator all keys')
-  local iter = db:new_iterator()
-
-  iter:first()
-  for k, v in iter.next, iter do
-    print(k, v)
-  end
-  iter:destroy()
+  db:each(nil, function(k, v) print(k, v) end)
   print("")
 end
 
@@ -88,6 +81,11 @@ print_db_data()
 
 print('close')
 db:close()
+
+print('destory')
+LevelDB.destroy_db('./tmp')
+
+print('end')
 ```
 
 

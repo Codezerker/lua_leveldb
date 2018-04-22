@@ -3,6 +3,7 @@ local leveldb = ffi.load('leveldb', true)
 if not leveldb then error("load leveldb failed.") end
 local M = {}
 local Iterator = {}
+local Batch = {}
 
 -- Ref https://github.com/google/leveldb/blob/master/include/leveldb/c.h
 ffi.cdef[[
@@ -54,7 +55,6 @@ ffi.cdef[[
 
   leveldb_writebatch_t* leveldb_writebatch_create();
   void leveldb_writebatch_destroy(leveldb_writebatch_t*);
-  void leveldb_writebatch_clear(leveldb_writebatch_t*);
   void leveldb_writebatch_put(
     leveldb_writebatch_t*,
     const char* key, size_t klen, const char* val, size_t vlen
@@ -75,41 +75,55 @@ ffi.cdef[[
 ]]
 
 
-local function create_options(options)
+local function create_options_with(options, fn)
   local c_options = leveldb.leveldb_options_create()
+  local c_err = ffi.new("char*[1]")
 
   options = options or {}
   if options.create_if_missing then leveldb.leveldb_options_set_create_if_missing(c_options, 1) end
   if options.error_if_exists then leveldb.leveldb_options_set_error_if_exists(c_options, 1) end
   if options.compression then leveldb.leveldb_options_set_compression(c_options, 1) end
 
-  return c_options
+  local r = fn(c_options, c_err)
+  leveldb.leveldb_options_destroy(c_options)
+  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
+
+  return r
 end
 
-local function create_read_options()
-  return leveldb.leveldb_readoptions_create()
+local function create_read_options_with(options, fn)
+  local c_options = leveldb.leveldb_readoptions_create()
+  local c_err = ffi.new("char*[1]")
+
+  local r = fn(c_options, c_err)
+  leveldb.leveldb_readoptions_destroy(c_options)
+  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
+
+  return r
 end
 
-local function create_write_options()
-  return leveldb.leveldb_writeoptions_create()
+local function create_write_options_with(options, fn)
+  local c_options = leveldb.leveldb_writeoptions_create()
+  local c_err = ffi.new("char*[1]")
+
+  local r = fn(c_options, c_err)
+  leveldb.leveldb_writeoptions_destroy(c_options)
+  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
+
+  return r
 end
 
 
 function M.new(dirname, options)
   local db = {}
   local mt = {__index = M}
-
   setmetatable(db, mt)
 
   db.options = options or {create_if_missing = true, error_if_exists = false}
 
-  local c_options = create_options(db.options)
-  local c_err = ffi.new("char*[1]")
-
-  db._db = leveldb.leveldb_open(c_options, dirname, c_err)
-  leveldb.leveldb_options_destroy(c_options)
-
-  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
+  create_options_with(db.options, function(c_options, c_err)
+    db._db = leveldb.leveldb_open(c_options, dirname, c_err)
+  end)
 
   local major = leveldb.leveldb_major_version()
   local minor = leveldb.leveldb_minor_version()
@@ -119,55 +133,37 @@ function M.new(dirname, options)
 end
 
 function M:set(key, val, options)
-  local c_options = create_write_options(options)
-  local c_err = ffi.new("char*[1]")
-  leveldb.leveldb_put(self._db, c_options, key, #key, val, #val, c_err)
-  leveldb.leveldb_writeoptions_destroy(c_options)
-  if c_err[0] ~= nil then
-    error(ffi.string(c_err[0]))
-  end
+  create_write_options_with(options, function(c_options, c_err)
+    leveldb.leveldb_put(self._db, c_options, key, #key, val, #val, c_err)
+  end)
 end
 
 function M:batchSet(data, options)
   if type(data) ~= "table" then error("data is not a table.") end
 
-  local options = create_write_options(options)
-  local batch = leveldb.leveldb_writebatch_create()
-  for key, val in pairs(data) do
-    leveldb.leveldb_writebatch_put(batch, key, #key, val, #val)
-  end
-  local c_err = ffi.new("char*[1]")
-  leveldb.leveldb_write(self._db, options, batch, c_err)
-  leveldb.leveldb_free(batch)
-  leveldb.leveldb_writeoptions_destroy(options)
-  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
+  local batch = Batch.new(self._db)
+  for key, val in pairs(data) do batch:set(key, val) end
+  batch:exec(options)
+  batch:destroy()
 end
 
 function M:get(key, options)
-  local c_options = create_read_options(options)
-  local c_err = ffi.new("char*[1]")
-  local c_size = ffi.new("size_t[1]")
-  local c_result = leveldb.leveldb_get(self._db, c_options, key, #key, c_size, c_err)
-  leveldb.leveldb_readoptions_destroy(c_options)
+  return create_read_options_with(options, function(c_options, c_err)
+    local c_size = ffi.new("size_t[1]")
+    local c_result = leveldb.leveldb_get(self._db, c_options, key, #key, c_size, c_err)
 
-  if c_err[0] ~= nil then
-    error(ffi.string(c_err[0]))
-  elseif c_size[0] == 0 then
-    return nil
-  else
-    return ffi.string(c_result, c_size[0])
-  end
+    if c_size[0] == 0 then
+      return nil
+    else
+      return ffi.string(c_result, c_size[0])
+    end
+  end)
 end
 
 function M:del(key, options)
-  local c_options = create_write_options(options)
-  local c_err = ffi.new("char*[1]")
-  leveldb.leveldb_delete(self._db, c_options, key, #key, c_err)
-  leveldb.leveldb_writeoptions_destroy(c_options)
-  if c_err[0] ~= nil then
-    error(ffi.string(c_err[0]))
-  end
-  return true
+  create_write_options_with(options, function(c_options, c_err)
+    leveldb.leveldb_delete(self._db, c_options, key, #key, c_err)
+  end)
 end
 
 -- Params:
@@ -175,20 +171,29 @@ end
 --
 function M:batchDel(data, options)
   if type(data) ~= "table" then error("data is not table.") end
-  local options = create_write_options(options)
-  local batch = leveldb.leveldb_writebatch_create()
-  for _, val in ipairs(data) do
-    leveldb.leveldb_writebatch_delete(batch, val, #val)
-  end
-  local c_err = ffi.new("char*[1]")
-  leveldb.leveldb_write(self._db, options, batch, c_err)
-  leveldb.leveldb_free(batch)
-  leveldb.leveldb_writeoptions_destroy(options)
-  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
+
+  local batch = Batch.new(self._db)
+  for _, key in ipairs(data) do batch:del(key) end
+  batch:exec(options)
+  batch:destroy()
 end
 
-function M:newIterator(options)
-  return Iterator.new(self._db, options)
+function M:newIteratorWith(options, fn)
+  local iter = Iterator.new(self._db, options)
+  fn(iter)
+  iter:destroy()
+end
+
+-- fn(options, function(k, v, iter))
+function M:each(options, fn)
+  local iter = Iterator.new(self._db, options)
+  iter:first()
+  local tmp
+  for k, v in iter.next, iter do
+    tmp = fn(k, v, iter)
+    if tmp == false then break end
+  end
+  iter:destroy()
 end
 
 function M:close()
@@ -196,27 +201,25 @@ function M:close()
 end
 
 function M.destroy_db(dirname)
-  local c_options = create_options()
-  local c_err = ffi.new("char*[1]")
-
-  leveldb.leveldb_destroy_db(c_options, dirname, c_err)
-  leveldb.leveldb_options_destroy(c_options)
-
-  if c_err[0] ~= nil then error(ffi.string(c_err[0])) end
-  return true
+  create_options_with({}, function(c_options, c_err)
+    leveldb.leveldb_destroy_db(c_options, dirname, c_err)
+  end)
 end
 
+
+--
+-- Iterator operations --
+--
 
 function Iterator.new(db, options)
   local iter = {}
   local mt = {__index = Iterator}
-
   setmetatable(iter, mt)
 
-  iter._db = db
-  local c_options = create_read_options()
-  iter.iterator = leveldb.leveldb_create_iterator(iter._db, c_options)
-  leveldb.leveldb_readoptions_destroy(c_options)
+  iter.db = db
+  create_read_options_with(options, function(c_options)
+    iter.iterator = leveldb.leveldb_create_iterator(iter.db, c_options)
+  end)
 
   return iter
 end
@@ -237,20 +240,23 @@ function Iterator:next()
   local valid = leveldb.leveldb_iter_valid(self.iterator)
   if valid == 0 then return nil end
 
-  local c_key_size = ffi.new("size_t[1]")
-  local c_key = leveldb.leveldb_iter_key(self.iterator, c_key_size)
-  local key = ffi.string(c_key, c_key_size[0])
-
-  local c_value_size = ffi.new("size_t[1]")
-  local c_value = leveldb.leveldb_iter_value(self.iterator, c_value_size)
-  local value = ffi.string(c_value, c_value_size[0])
-
+  local key, value = self:read()
   leveldb.leveldb_iter_next(self.iterator)
 
   return key, value
 end
 
 function Iterator:prev()
+  local valid = leveldb.leveldb_iter_valid(self.iterator)
+  if valid == 0 then return nil end
+
+  local key, value = self:read()
+  leveldb.leveldb_iter_prev(self.iterator)
+
+  return key, value
+end
+
+function Iterator:read()
   local valid = leveldb.leveldb_iter_valid(self.iterator)
   if valid == 0 then return nil end
 
@@ -262,8 +268,6 @@ function Iterator:prev()
   local c_value = leveldb.leveldb_iter_value(self.iterator, c_value_size)
   local value = ffi.string(c_value, c_value_size[0])
 
-  leveldb.leveldb_iter_prev(self.iterator)
-
   return key, value
 end
 
@@ -271,5 +275,37 @@ function Iterator:destroy()
   if self.iterator then leveldb.leveldb_iter_destroy(self.iterator) end
 end
 
+
+--
+-- Batch operations --
+--
+
+function Batch.new(db)
+  local batch = {}
+  setmetatable(batch, {__index = Batch})
+
+  batch.db = db
+  batch.c_batch = leveldb.leveldb_writebatch_create()
+
+  return batch
+end
+
+function Batch:set(key, val)
+  leveldb.leveldb_writebatch_put(self.c_batch, key, #key, val, #val)
+end
+
+function Batch:del(key)
+  leveldb.leveldb_writebatch_delete(self.c_batch, key, #key)
+end
+
+function Batch:exec(options)
+  create_write_options_with(options, function(c_options, c_err)
+    leveldb.leveldb_write(self.db, c_options, self.c_batch, c_err)
+  end)
+end
+
+function Batch:destroy()
+  leveldb.leveldb_writebatch_destroy(self.c_batch)
+end
 
 return M

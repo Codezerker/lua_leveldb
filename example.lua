@@ -1,5 +1,5 @@
-leveldb = require 'leveldb'
-db = leveldb.new('./tmp')
+LevelDB = require 'leveldb'
+db = LevelDB.new('./tmp')
 
 print('version: ' .. db.version .. "\n")
 
@@ -10,13 +10,7 @@ print("")
 
 function print_db_data()
   print('Iterator all keys')
-  local iter = db:newIterator()
-
-  iter:first()
-  for k, v in iter.next, iter do
-    print(k, v)
-  end
-  iter:destroy()
+  db:each(nil, function(k, v) print(k, v) end)
   print("")
 end
 
@@ -44,4 +38,9 @@ print_db_data()
 
 print('close')
 db:close()
+
+print('destory')
+LevelDB.destroy_db('./tmp')
+
+print('end')
 

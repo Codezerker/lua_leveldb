@@ -2,9 +2,7 @@ describe('LevelDB', function()
   local db = LevelDB.new('./tmp/test')
 
   before_each(function()
-    local iter = db:newIterator()
-    iter:first()
-    for k, v in iter.next, iter do db:del(k) end
+    db:each(nil, function(k, v) db:del(k) end)
   end)
 
   teardown(function()
@@ -49,6 +47,10 @@ describe('LevelDB', function()
       assert.is_equal(db:get('bb'), '1234')
       assert.is_equal(db:get('t'), t)
     end)
+
+    it('should can delete a unset key', function()
+      db:del('del_unset_key')
+    end)
   end)
 
   describe(':batchDel', function()
@@ -65,54 +67,76 @@ describe('LevelDB', function()
   describe('Iterator', function()
     it('should allow map all data from first to last', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:newIterator()
-      iter:first()
       local kvs = {}
-      for k, v in iter.next, iter do table.insert(kvs, {k, v}) end
+      db:newIteratorWith(nil, function(iter)
+        iter:first()
+        for k, v in iter.next, iter do table.insert(kvs, {k, v}) end
+      end)
       assert.is_same(kvs, { {'a', '1'}, {'b', '2'}, {'c', '4'} })
-      iter:destroy()
     end)
 
     it('should allow map all data from first to first', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:newIterator()
-      iter:first()
       local kvs = {}
-      for k, v in iter.prev, iter do table.insert(kvs, {k, v}) end
+      db:newIteratorWith(nil, function(iter)
+        iter:first()
+        for k, v in iter.prev, iter do table.insert(kvs, {k, v}) end
+      end)
       assert.is_same(kvs, { {'a', '1'} })
-      iter:destroy()
     end)
 
     it('should allow map from last to last', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:newIterator()
-      iter:last()
       local kvs = {}
-      for k, v in iter.next, iter do table.insert(kvs, {k, v}); end
+      db:newIteratorWith(nil, function(iter)
+        iter:last()
+        for k, v in iter.next, iter do table.insert(kvs, {k, v}); end
+      end)
       assert.is_same(kvs, {{'c', '4'} })
-      iter:destroy()
     end)
 
     it('should allow map from last to first', function()
       db:batchSet({a = '1', b = '2', c = '4'})
-      local iter = db:newIterator()
-      iter:last()
       local kvs = {}
-      for k, v in iter.prev, iter do table.insert(kvs, {k, v}); end
+      db:newIteratorWith(nil, function(iter)
+        iter:last()
+        for k, v in iter.prev, iter do table.insert(kvs, {k, v}); end
+      end)
       assert.is_same(kvs, { {'c', '4'}, {'b', '2'}, {'a', '1'} })
-      iter:destroy()
     end)
 
     it('should allow map from a key to last', function()
       db:batchSet({b = '2', e = '1'})
       db:batchSet({a = '12', d = '14'})
-      local iter = db:newIterator()
-      iter:seek('c')
       local kvs = {}
-      for k, v in iter.next, iter do table.insert(kvs, {k, v}); end
+      db:newIteratorWith(nil, function(iter)
+        iter:seek('c')
+        for k, v in iter.next, iter do table.insert(kvs, {k, v}); end
+      end)
       assert.is_same(kvs, { {'d', '14'}, {'e', '1'} })
-      iter:destroy()
+    end)
+  end)
+
+  describe(':each', function()
+    it('should each all data', function()
+      db:batchSet({b = '2', e = '1'})
+      db:batchSet({a = '12', d = '14'})
+      local kvs = {}
+      db:each(nil, function(k, v, iter)
+        table.insert(kvs, {k, v})
+      end)
+      assert.is_same(kvs, { {'a', '12'}, {'b', '2'}, {'d', '14'}, {'e', '1'} })
     end)
 
+    it('should stop each if return false', function()
+      db:batchSet({b = '2', e = '1'})
+      db:batchSet({a = '12', d = '14'})
+      local kvs = {}
+      db:each(nil, function(k, v, iter)
+        table.insert(kvs, {k, v})
+        return false
+      end)
+      assert.is_same(kvs, { {'a', '12'} })
+    end)
   end)
 end)
